@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request, status
+from fastapi import Depends, FastAPI, Request, Response, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -6,11 +6,12 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.api import auth, cron, domains, health
-from app.config import get_settings
+from app.api.health import HealthResponse
+from app.config import Settings, get_settings
 
 settings = get_settings()
 
-# ---------------------------------------------------------------------------
+
 # OpenAPI docs — hide in production by setting DOCS_ENABLED=false
 # ---------------------------------------------------------------------------
 app = FastAPI(
@@ -100,5 +101,6 @@ app.include_router(cron.router)
 
 
 @app.get("/", include_in_schema=False)
-async def root() -> dict[str, str]:
-    return {"app": settings.app_name, "docs": "/docs", "health": "/health"}
+async def root(response: Response, settings: Settings = Depends(get_settings)) -> HealthResponse:
+    """Root endpoint — behaves identically to /health."""
+    return await health.health(response=response, settings=settings)
