@@ -42,6 +42,20 @@ class Settings(BaseSettings):
     # WHOIS lookups go through an external server and are often slow.
     whois_timeout: float = 30.0
 
+    # Seconds to sleep between consecutive WHOIS lookups in the cron job.
+    # Keeps us polite to WHOIS servers that rate-limit by source IP.
+    whois_batch_delay: float = 2.0
+
+    # Supabase service-role key — bypasses RLS and is ONLY used by the
+    # cron job to read all domains across all users.  Never expose this
+    # key to the client or return it in any response.
+    supabase_service_key: str = ""
+
+    # Random secret shared with Vercel.  Vercel sends this as
+    # Authorization: Bearer {cron_secret} on every cron invocation.
+    # Generate with: python -c "import secrets; print(secrets.token_hex(32))"
+    cron_secret: str = ""
+
 
     # Seconds to cache the Supabase JWKS before refetching signing keys.
     jwks_cache_ttl: float = 600.0
