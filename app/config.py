@@ -27,6 +27,19 @@ class Settings(BaseSettings):
     # check exercises the real Postgres path and not just auth reachability.
     supabase_health_table: str = ""
 
+    # Seconds to cache the Supabase JWKS before refetching signing keys.
+    jwks_cache_ttl: float = 600.0
+
+    @property
+    def auth_url(self) -> str:
+        """Base URL of the Supabase auth (GoTrue) service."""
+        return f"{self.supabase_url.rstrip('/')}/auth/v1"
+
+    @property
+    def jwt_issuer(self) -> str:
+        """Expected `iss` claim on Supabase-issued access tokens."""
+        return self.auth_url
+
 
 @lru_cache
 def get_settings() -> Settings:
