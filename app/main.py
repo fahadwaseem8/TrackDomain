@@ -1,4 +1,4 @@
-from fastapi import Depends, FastAPI, Request, Response, status
+from fastapi import FastAPI, Request, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -6,7 +6,6 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.api import auth, cron, domains, health
-from app.api.health import HealthResponse
 from app.config import Settings, get_settings
 
 settings = get_settings()
@@ -98,9 +97,3 @@ app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(domains.router)
 app.include_router(cron.router)
-
-
-@app.get("/", include_in_schema=False)
-async def root(response: Response, settings: Settings = Depends(get_settings)) -> HealthResponse:
-    """Root endpoint — behaves identically to /health."""
-    return await health.health(response=response, settings=settings)

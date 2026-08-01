@@ -22,7 +22,7 @@ class HealthResponse(BaseModel):
 
 
 @router.get(
-    "/health",
+    "/",
     response_model=HealthResponse,
     summary="Health check",
     responses={503: {"model": HealthResponse, "description": "A dependency is unhealthy"}},
