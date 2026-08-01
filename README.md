@@ -62,6 +62,9 @@ cp .env.example .env
 |----------|-------------|---------|
 | `SUPABASE_URL` | Your Supabase project URL | — |
 | `SUPABASE_KEY` | Your Supabase anon/service key | — |
+| `SUPABASE_SERVICE_KEY` | (Cron only) Supabase service role key | — |
+| `CRON_SECRET` | (Cron only) Secret to authorize the cron endpoint | — |
+| `WHOIS_BATCH_DELAY` | Seconds to wait between WHOIS lookups in cron | `2.0` |
 | `HEALTH_CHECK_TIMEOUT` | Seconds to wait on the Supabase ping | `3.0` |
 | `SUPABASE_HEALTH_TABLE` | Optional table to read 1 row from during `/health` | unset |
 | `JWKS_CACHE_TTL` | How long to cache Supabase's public signing keys | `600` |
@@ -90,6 +93,12 @@ Interactive docs: `http://localhost:8000/docs`
 | `POST` | `/auth/signup` | Register a new account | — |
 | `POST` | `/auth/login` | Exchange credentials for a JWT | — |
 | `GET` | `/auth/me` | Current authenticated user | Bearer |
+| `GET` | `/domains` | List tracked domains for the user | Bearer |
+| `POST` | `/domains` | Add a domain to the tracking list | Bearer |
+| `DELETE` | `/domains/{id}` | Remove a tracked domain | Bearer |
+| `GET` | `/domains/{id}/whois` | Get cached WHOIS data for a domain | Bearer |
+| `POST` | `/domains/{id}/whois`| Fetch or refresh WHOIS data for a domain | Bearer |
+| `GET` | `/cron/refresh-whois`| Background job to refresh all WHOIS data | `CRON_SECRET` |
 
 `/health` returns `200` when everything is reachable and `503` when Supabase is not,
 so uptime monitors and load balancers can act on the status code alone:
@@ -131,6 +140,18 @@ curl -X POST localhost:8000/auth/login \
 # 3. Call a protected route
 curl localhost:8000/auth/me -H "Authorization: Bearer eyJ..."
 # 200 {"id":"...","email":"you@example.com","role":"authenticated"}
+
+# 4. Add a domain to track
+curl -X POST localhost:8000/domains \
+  -H "Authorization: Bearer eyJ..." \
+  -H 'Content-Type: application/json' \
+  -d '{"domain":"example.com"}'
+# 201 {"id":"...","domain":"example.com","created_at":"..."}
+
+# 5. Fetch WHOIS data for the domain
+curl -X POST localhost:8000/domains/.../whois \
+  -H "Authorization: Bearer eyJ..."
+# 200 {"domain":"example.com","fetched_at":"...","raw":"...","parsed":{...}}
 ```
 
 Protect any route by depending on `get_current_user`:
@@ -187,17 +208,23 @@ stub Supabase, so the suite needs no network access or credentials.
 ## Project Structure
 
 ```
-main.py             # Entry point shim -> app.main:app
+main.py                 # Entry point shim -> app.main:app
 app/
-├── main.py         # FastAPI app instance & router registration
-├── config.py           # Settings loaded from .env via pydantic-settings
+├── main.py             # FastAPI app instance & router registration
+├── config.py           # Settings loaded from .env
 ├── db.py               # Supabase connectivity check
-├── security.py         # JWT verification (JWKS) + get_current_user dependency
-├── supabase_client.py  # Async wrapper over the Supabase Auth (GoTrue) API
+├── domains_db.py       # Domain DB operations
+├── whois_db.py         # WHOIS DB operations
+├── cron_db.py          # Cron DB operations (Service role)
+├── security.py         # JWT verification (JWKS) + get_current_user
+├── supabase_client.py  # Async wrapper over Supabase Auth
 ├── rate_limit.py       # Sliding-window brute-force limiter
+├── whois_service.py    # asyncwhois fetching and parsing logic
 └── api/
     ├── health.py       # Health check route
-    └── auth.py         # signup / login / me
+    ├── auth.py         # signup / login / me
+    ├── domains.py      # Domain tracking and WHOIS routes
+    └── cron.py         # Scheduled background tasks (Vercel Cron)
 tests/                  # pytest suite (no network required)
 ```
 
