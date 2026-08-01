@@ -1,5 +1,8 @@
+# pyrefly: ignore [missing-import]
 from fastapi import FastAPI, Request, status
+# pyrefly: ignore [missing-import]
 from fastapi.encoders import jsonable_encoder
+# pyrefly: ignore [missing-import]
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -11,15 +14,13 @@ from app.config import Settings, get_settings
 settings = get_settings()
 
 
-# OpenAPI docs — hide in production by setting DOCS_ENABLED=false
+# ---------------------------------------------------------------------------
+# OpenAPI docs
 # ---------------------------------------------------------------------------
 app = FastAPI(
     title=settings.app_name,
     version=settings.version,
     description="A domain tracking and monitoring API.",
-    docs_url="/docs" if settings.docs_enabled else None,
-    redoc_url="/redoc" if settings.docs_enabled else None,
-    openapi_url="/openapi.json" if settings.docs_enabled else None,
 )
 
 

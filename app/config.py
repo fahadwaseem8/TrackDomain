@@ -25,9 +25,6 @@ class Settings(BaseSettings):
     # Use "*" only for fully public, read-only APIs.
     cors_allowed_origins: Annotated[list[str], Field(default_factory=list)]
 
-    # Set to False to hide /docs and /redoc in production.
-    docs_enabled: bool = True
-
     supabase_url: str = ""
     supabase_key: str = ""
 
