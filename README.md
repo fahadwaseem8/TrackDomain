@@ -58,19 +58,57 @@ Copy the example env file and fill in your credentials:
 cp .env.example .env
 ```
 
-| Variable | Description |
-|----------|-------------|
-| `SUPABASE_URL` | Your Supabase project URL |
-| `SUPABASE_KEY` | Your Supabase anon/service key |
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `SUPABASE_URL` | Your Supabase project URL | — |
+| `SUPABASE_KEY` | Your Supabase anon/service key | — |
+| `HEALTH_CHECK_TIMEOUT` | Seconds to wait on the Supabase ping | `3.0` |
+| `SUPABASE_HEALTH_TABLE` | Optional table to read 1 row from during `/health` | unset |
 
 ## Running the API
 
 ```bash
-uvicorn main:app --reload
+uvicorn app.main:app --reload
+
+# `uvicorn main:app --reload` also works — main.py re-exports the app
 ```
 
 The API will be available at `http://localhost:8000`.  
 Interactive docs: `http://localhost:8000/docs`
+
+## Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/health` | App status + live Supabase connectivity |
+
+`/health` returns `200` when everything is reachable and `503` when Supabase is not,
+so uptime monitors and load balancers can act on the status code alone:
+
+```json
+{
+  "status": "ok",
+  "app": "TrackDomain",
+  "version": "0.1.0",
+  "environment": "development",
+  "database": { "status": "ok", "latency_ms": 581.6, "detail": null }
+}
+```
+
+`database.status` is one of `ok`, `unauthorized`, `unreachable`, `timeout`,
+`error`, or `not_configured` — with `detail` explaining the failure.
+
+## Project Structure
+
+```
+main.py             # Entry point shim -> app.main:app
+app/
+├── main.py         # FastAPI app instance & router registration
+├── config.py       # Settings loaded from .env via pydantic-settings
+├── db.py           # Supabase connectivity check
+└── api/
+    └── health.py   # Health check route
+```
 
 ## Tech Stack
 
