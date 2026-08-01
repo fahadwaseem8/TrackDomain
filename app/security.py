@@ -73,6 +73,11 @@ async def _signing_key(settings: Settings, kid: str) -> jwt.PyJWK:
     if stale:  # already the newest key set — the kid genuinely isn't ours
         raise _unauthorized("Token signed with an unknown key")
 
+    # Rotation refetch, throttled: an unknown `kid` is attacker-controlled, so
+    # refetching on every miss would let anyone drive outbound traffic to Supabase.
+    if time.monotonic() - _jwks_fetched_at < settings.jwks_min_refetch_seconds:
+        raise _unauthorized("Token signed with an unknown key")
+
     try:
         return (await _fetch_jwks(settings))[kid]
     except KeyError:
@@ -114,6 +119,12 @@ async def get_current_user(
         raise _unauthorized("Token has expired") from None
     except jwt.InvalidTokenError as exc:
         raise _unauthorized(f"Invalid token: {exc}") from None
+
+    # Supabase anonymous sign-ins also carry role "authenticated". They are
+    # disabled on this project today, but enabling them in the dashboard must
+    # not silently promote drive-by visitors to real users.
+    if claims.get("is_anonymous"):
+        raise _unauthorized("Anonymous sessions are not permitted")
 
     return CurrentUser(
         id=claims["sub"],

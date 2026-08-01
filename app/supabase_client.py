@@ -66,6 +66,11 @@ async def _post(settings: Settings, path: str, payload: dict[str, Any], **kwargs
         raise SupabaseAuthError(503, f"Authentication service unreachable: {exc}") from exc
 
     if response.is_error:
+        # Never relay a 5xx body — it can carry upstream internals. Log-worthy
+        # server-side, but the client gets a generic message.
+        if response.status_code >= 500:
+            raise SupabaseAuthError(502, "Authentication service error")
+
         message, code = _extract_error(response)
         # GoTrue reports bad credentials as 400; 401 is the correct status for a client.
         status_code = 401 if response.status_code == 400 and code == "invalid_credentials" else response.status_code

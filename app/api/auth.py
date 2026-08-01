@@ -1,13 +1,18 @@
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, EmailStr, Field
 
 from app.config import Settings, get_settings
+from app.rate_limit import SlidingWindowLimiter, client_key, enforce
 from app.security import CurrentUser, get_current_user
 from app.supabase_client import SupabaseAuthError, sign_in, sign_up
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+_settings = get_settings()
+_login_limiter = SlidingWindowLimiter(_settings.login_max_attempts, _settings.login_window_seconds)
+_signup_limiter = SlidingWindowLimiter(_settings.signup_max_attempts, _settings.signup_window_seconds)
 
 
 class Credentials(BaseModel):
@@ -26,7 +31,8 @@ class TokenResponse(BaseModel):
 
 
 class SignupResponse(BaseModel):
-    user_id: str
+    # Withheld while confirmation is pending — see the note in `signup()`.
+    user_id: str | None = None
     email: str | None = None
     confirmation_required: bool
     message: str
@@ -51,11 +57,18 @@ def _token_response(payload: dict[str, Any]) -> TokenResponse:
     summary="Register a new account",
 )
 async def signup(
+    request: Request,
     credentials: Credentials,
     settings: Settings = Depends(get_settings),
 ) -> SignupResponse:
     """Create an account. The project requires email confirmation, so no token
     is issued here — the user must confirm before they can log in."""
+    enforce(
+        _signup_limiter,
+        client_key(request, credentials.email),
+        "Too many signup attempts. Try again later.",
+    )
+
     try:
         payload = await sign_up(settings, credentials.email, credentials.password)
     except SupabaseAuthError as exc:
@@ -65,24 +78,36 @@ async def signup(
     user = payload.get("user") or payload
     confirmed = bool(user.get("confirmed_at") or user.get("email_confirmed_at"))
 
+    if not confirmed:
+        # Signing up with an already-registered address returns that account's
+        # real id, which would hand an unauthenticated caller the UUID that RLS
+        # policies and owner columns key on. The caller cannot use the id until
+        # they confirm anyway, so withhold it and keep this response identical
+        # whether or not the address was already taken.
+        return SignupResponse(
+            email=credentials.email,
+            confirmation_required=True,
+            message="If that address is available, a confirmation email is on its way.",
+        )
+
     return SignupResponse(
-        user_id=user.get("id", ""),
+        user_id=user.get("id"),
         email=user.get("email"),
-        confirmation_required=not confirmed,
-        message=(
-            "Account created. Check your email to confirm it before logging in."
-            if not confirmed
-            else "Account created. You can now log in."
-        ),
+        confirmation_required=False,
+        message="Account created. You can now log in.",
     )
 
 
 @router.post("/login", response_model=TokenResponse, summary="Exchange credentials for a token")
 async def login(
+    request: Request,
     credentials: Credentials,
     settings: Settings = Depends(get_settings),
 ) -> TokenResponse:
     """Log in and receive a Supabase-issued JWT access token."""
+    key = client_key(request, credentials.email)
+    enforce(_login_limiter, key, "Too many login attempts. Try again later.")
+
     try:
         payload = await sign_in(settings, credentials.email, credentials.password)
     except SupabaseAuthError as exc:
@@ -92,6 +117,8 @@ async def login(
             headers={"WWW-Authenticate": "Bearer"} if exc.status_code == 401 else None,
         ) from exc
 
+    # Successful login clears the window so earlier typos don't count against the user.
+    _login_limiter.reset(key)
     return _token_response(payload)
 
 

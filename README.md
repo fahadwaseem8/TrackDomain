@@ -64,6 +64,10 @@ cp .env.example .env
 | `SUPABASE_KEY` | Your Supabase anon/service key | — |
 | `HEALTH_CHECK_TIMEOUT` | Seconds to wait on the Supabase ping | `3.0` |
 | `SUPABASE_HEALTH_TABLE` | Optional table to read 1 row from during `/health` | unset |
+| `JWKS_CACHE_TTL` | How long to cache Supabase's public signing keys | `600` |
+| `JWKS_MIN_REFETCH_SECONDS` | Floor between key-rotation refetches | `60` |
+| `LOGIN_MAX_ATTEMPTS` / `LOGIN_WINDOW_SECONDS` | Login limit per IP+email | `10` / `300` |
+| `SIGNUP_MAX_ATTEMPTS` / `SIGNUP_WINDOW_SECONDS` | Signup limit per IP+email | `5` / `3600` |
 
 ## Running the API
 
@@ -137,9 +141,46 @@ async def list_domains(user: CurrentUser = Depends(get_current_user)):
     return {"owner": user.id}
 ```
 
-To require confirmed emails to be optional (returning tokens straight from signup),
-turn **Confirm email** off under *Authentication → Providers → Email* in the Supabase
-dashboard; `/auth/signup` already returns `confirmation_required: false` in that case.
+To return tokens straight from signup instead, turn **Confirm email** off under
+*Authentication → Providers → Email* in the Supabase dashboard; `/auth/signup`
+already returns `confirmation_required: false` and the `user_id` in that case.
+
+### Security notes
+
+What the auth layer defends against, and what it deliberately does not:
+
+- **Algorithm pinning.** Tokens are verified with the algorithm named in the JWKS,
+  never the one in the token header — otherwise an attacker can downgrade `ES256`
+  to `HS256` and sign with the public key as the HMAC secret.
+- **Claims.** `aud`, `iss`, `exp`, and `nbf` are all enforced, `sub` and `exp` are
+  required, and anonymous Supabase sessions are refused even though they carry
+  `role: authenticated`.
+- **JWKS refetch throttling.** An unknown `kid` triggers at most one key refetch
+  per `JWKS_MIN_REFETCH_SECONDS`, so forged tokens can't drive outbound traffic.
+- **No secrets in error bodies.** `422` responses never echo the submitted
+  password, and upstream `5xx` bodies are replaced with a generic message.
+- **Signup withholds `user_id`** while confirmation is pending, so the response is
+  identical whether or not the address was already registered.
+- **Rate limiting** is per `(client IP, email)` and lives in process memory — N
+  workers allow N× the limit and a restart clears it. Put a shared limiter (Redis)
+  or an edge rule in front of this before going public. Behind a proxy, run uvicorn
+  with `--proxy-headers` and a trusted `--forwarded-allow-ips`, or every caller
+  looks like the proxy.
+- **Not implemented: revocation.** Tokens are verified locally, so a signed-out or
+  banned user's access token stays valid until it expires (~1 hour). Shorten the
+  JWT expiry in Supabase if that window matters.
+- **Not implemented: token refresh.** `/auth/login` returns a `refresh_token`, but
+  there is no `/auth/refresh` endpoint yet — clients re-login when the token expires.
+
+## Tests
+
+```bash
+pytest
+```
+
+36 tests covering token validation (forged, expired, wrong-audience, algorithm
+confusion), rate limiting, credential redaction, and health status mapping. They
+stub Supabase, so the suite needs no network access or credentials.
 
 ## Project Structure
 
@@ -151,9 +192,11 @@ app/
 ├── db.py               # Supabase connectivity check
 ├── security.py         # JWT verification (JWKS) + get_current_user dependency
 ├── supabase_client.py  # Async wrapper over the Supabase Auth (GoTrue) API
+├── rate_limit.py       # Sliding-window brute-force limiter
 └── api/
     ├── health.py       # Health check route
     └── auth.py         # signup / login / me
+tests/                  # pytest suite (no network required)
 ```
 
 ## Tech Stack

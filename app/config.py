@@ -30,6 +30,18 @@ class Settings(BaseSettings):
     # Seconds to cache the Supabase JWKS before refetching signing keys.
     jwks_cache_ttl: float = 600.0
 
+    # Floor between key-rotation refetches. Without it, a token bearing an
+    # unknown `kid` forces an outbound request, letting an attacker turn cheap
+    # requests into traffic against Supabase.
+    jwks_min_refetch_seconds: float = 60.0
+
+    # Brute-force limits, per (client IP, email) pair. See app/rate_limit.py
+    # for why these are per-process and what that means in production.
+    login_max_attempts: int = 10
+    login_window_seconds: float = 300.0
+    signup_max_attempts: int = 5
+    signup_window_seconds: float = 3600.0
+
     @property
     def auth_url(self) -> str:
         """Base URL of the Supabase auth (GoTrue) service."""
