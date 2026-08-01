@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from app.api import auth, health
+from app.api import auth, domains, health
 from app.config import get_settings
 
 settings = get_settings()
@@ -95,6 +95,7 @@ async def validation_exception_handler(_: Request, exc: RequestValidationError) 
 
 app.include_router(health.router)
 app.include_router(auth.router)
+app.include_router(domains.router)
 
 
 @app.get("/", include_in_schema=False)
