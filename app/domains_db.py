@@ -121,3 +121,33 @@ async def remove_domain(
     # PostgREST returns the deleted rows; empty list = not found / not yours
     deleted = resp.json() if resp.content else []
     return bool(deleted)
+
+
+async def get_domain_by_id(
+    settings: Settings,
+    user_jwt: str,
+    domain_id: str,
+) -> dict[str, Any] | None:
+    """Return a single tracked-domain row by its UUID for the authenticated user.
+
+    Returns None if not found or if RLS hides the row (i.e. it belongs to
+    someone else).  The caller treats both cases as 404.
+    """
+    resp = await _request(
+        "GET",
+        _rest_url(settings, "/tracked_domains"),
+        headers=_headers(settings, user_jwt),
+        timeout=settings.health_check_timeout,
+        params={
+            "select": "id,domain",
+            "id": f"eq.{domain_id}",
+            "limit": "1",
+        },
+    )
+    if resp.status_code == 401:
+        raise DomainDBError(401, "Unauthorized")
+    if resp.status_code >= 400:
+        raise DomainDBError(502, f"Database error (HTTP {resp.status_code})")
+    rows = resp.json()
+    return rows[0] if rows else None
+

@@ -38,6 +38,11 @@ class Settings(BaseSettings):
     # check exercises the real Postgres path and not just auth reachability.
     supabase_health_table: str = ""
 
+    # Seconds to wait for a WHOIS server to respond.
+    # WHOIS lookups go through an external server and are often slow.
+    whois_timeout: float = 30.0
+
+
     # Seconds to cache the Supabase JWKS before refetching signing keys.
     jwks_cache_ttl: float = 600.0
 
