@@ -1,5 +1,7 @@
 from functools import lru_cache
+from typing import Annotated
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -15,7 +17,16 @@ class Settings(BaseSettings):
     app_name: str = "TrackDomain"
     version: str = "0.1.0"
     environment: str = "development"
-    debug: bool = True
+    # Set to True only for local dev; never expose tracebacks in production.
+    debug: bool = False
+
+    # Comma-separated list of allowed CORS origins, e.g. "https://app.example.com".
+    # An empty string disables CORS (same-origin only).
+    # Use "*" only for fully public, read-only APIs.
+    cors_allowed_origins: Annotated[list[str], Field(default_factory=list)]
+
+    # Set to False to hide /docs and /redoc in production.
+    docs_enabled: bool = True
 
     supabase_url: str = ""
     supabase_key: str = ""

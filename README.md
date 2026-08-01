@@ -72,9 +72,11 @@ cp .env.example .env
 ## Running the API
 
 ```bash
-uvicorn app.main:app --reload
+# Recommended — suppresses the Server: uvicorn fingerprinting header
+python run.py
 
-# `uvicorn main:app --reload` also works — main.py re-exports the app
+# Quick dev alternative (still works, but leaks the server header)
+uvicorn app.main:app --reload --no-server-header
 ```
 
 The API will be available at `http://localhost:8000`.  
