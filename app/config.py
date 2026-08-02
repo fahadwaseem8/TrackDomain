@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import Annotated
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -25,8 +25,8 @@ class Settings(BaseSettings):
     # Use "*" only for fully public, read-only APIs.
     cors_allowed_origins: Annotated[list[str], Field(default_factory=list)]
 
-    supabase_url: str = ""
-    supabase_key: str = ""
+    supabase_url: str = Field(default="", validation_alias=AliasChoices("supabase_url", "next_public_supabase_url"))
+    supabase_key: str = Field(default="", validation_alias=AliasChoices("supabase_key", "next_public_supabase_anon_key", "supabase_publishable_key"))
 
     # Seconds to wait on the Supabase ping before calling it unhealthy.
     health_check_timeout: float = 3.0
@@ -46,7 +46,7 @@ class Settings(BaseSettings):
     # Supabase service-role key — bypasses RLS and is ONLY used by the
     # cron job to read all domains across all users.  Never expose this
     # key to the client or return it in any response.
-    supabase_service_key: str = ""
+    supabase_service_key: str = Field(default="", validation_alias=AliasChoices("supabase_service_key", "supabase_service_role_key", "supabase_secret_key"))
 
     # Random secret shared with Vercel.  Vercel sends this as
     # Authorization: Bearer {cron_secret} on every cron invocation.
